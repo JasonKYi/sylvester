@@ -122,53 +122,94 @@ variables [add_comm_group V] [module K V] [finite_dimensional K V]
 lemma weighted_sum_squares_apply (w v : ι → R) :
   weighted_sum_squares w v = ∑ i : ι, w i * v i * v i := rfl
 
-lemma equivalent_weighted_sum_squares_of_nondegenerate 
+lemma equivalent_weighted_sum_squares_of_nondegenerate' 
   (Q : quadratic_form K V) (hQ : (associated Q).nondegenerate) : 
   ∃ w : fin (finite_dimensional.finrank K V) → K, 
-    equivalent Q (weighted_sum_squares w) :=
+  (∀ i, w i ≠ 0) ∧ equivalent Q (weighted_sum_squares w) :=
 begin
-  obtain ⟨v, hv₁, hv₂⟩ := exists_orthogonal_basis hQ associated_is_sym,
-  refine ⟨λ i, associated Q (v i) (v i), _⟩,
+  obtain ⟨v, hv₁, hv₂, hv₃⟩ := exists_orthogonal_basis' hQ associated_is_sym,
+  refine ⟨λ i, associated Q (v i) (v i), hv₃, _⟩,
   refine nonempty.intro _,
   convert Q.isometry_of_is_basis hv₂,
   ext w, 
   rw [isometry_of_is_Ortho_apply Q hv₂ hv₁], refl,
 end
 
--- Basis lemma: PR
+lemma equivalent_weighted_sum_squares_of_nondegenerate 
+  (Q : quadratic_form K V) (hQ : (associated Q).nondegenerate) : 
+  ∃ w : fin (finite_dimensional.finrank K V) → K, 
+    equivalent Q (weighted_sum_squares w) :=
+let ⟨w, _, hw₂⟩ := Q.equivalent_weighted_sum_squares_of_nondegenerate' hQ in ⟨w, hw₂⟩
+
+-- Missing?
 lemma smul_is_basis {v : ι → M} (hv : is_basis R v) 
-  {w : ι → R} (hw : ∀ i : ι, w i ≠ 0) : is_basis R (λ i, w i • v i) := 
+  {w : ι → R} (hw₁ : ∀ i : ι, w i ≠ 0) (hw₂ : ∀ i : ι, invertible (w i)) : 
+  is_basis R (λ i, w i • v i) := 
 begin
-  sorry
+  obtain ⟨hw₁', hw₁''⟩ := hv,
+  refine ⟨_, _⟩,
+  { rw linear_independent_iff'' at hw₁' ⊢,
+    intros s g hgs hsum i, 
+    have hw : g i * w i = 0 := hw₁' s (λ i, g i • w i) _ _ i,
+    { suffices : g i * w i * (hw₂ i).inv_of = 0,
+        rwa [mul_assoc, mul_inv_of_self, mul_one] at this,
+      rw [hw, zero_mul] },
+    { intros i hi,
+      simp only [algebra.id.smul_eq_mul, hgs i hi, zero_mul] },
+    { rw [← hsum, sum_congr rfl _],
+      intros, simp only [smul_assoc] } },
+  { rw eq_top_iff,
+    intros j hj,
+    rw ← hw₁'' at hj,
+    rw submodule.mem_span at hj ⊢,
+    refine λ p hp, hj p (λ u hu, _),
+    obtain ⟨i, rfl⟩ := hu,
+    have := p.smul_mem (⅟ (w i)) (hp ⟨i, rfl⟩),
+    simp only [← smul_assoc, smul_eq_mul, inv_of_mul_self, one_smul] at this,
+    exact this }
 end
 
 section complex
 
-noncomputable instance two_invertible : invertible (2 : ℂ) := 
-{ inv_of := 2⁻¹,
-  inv_of_mul_self := by norm_num,
-  mul_inv_of_self := by norm_num }
-  
-def isometry_sum_squares (w : ι → ℂ) (hw : ∀ i : ι, w i ≠ 0) : 
+-- Should be a def since it takes a parameter
+def field.invertible {z : K} (hz : z ≠ 0) : invertible z :=
+{ inv_of := z⁻¹,
+  inv_of_mul_self := inv_mul_cancel hz,
+  mul_inv_of_self := mul_inv_cancel hz }
+
+noncomputable def isometry_sum_squares (w : ι → ℂ) (hw : ∀ i : ι, w i ≠ 0) : 
   isometry (weighted_sum_squares w) (weighted_sum_squares (λ _, 1 : ι → ℂ)) := 
 begin
-  -- have hw' : ∀ i : ι, (w i).sqrt⁻¹ ≠ 0, sorry,
-  -- have := smul_is_basis (pi.is_basis_fun ℂ ι) hw', 
-  -- dsimp at this,
-  -- suffices : weighted_sum_squares (λ (_x : ι), 1 : ι → ℂ) 
-  --   = (weighted_sum_squares w).isometry_of_is_basis' this, sorry,
-  -- convert (weighted_sum_squares w).isometry_of_is_basis this,
-  -- ext1 v,
-  -- rw [isometry_of_is_basis_apply, weighted_sum_squares_apply, 
-  --     weighted_sum_squares_apply],
-  -- refine sum_congr rfl _,
-  -- intros j _, 
-  -- have : ∑ (i : ι), v i • ((linear_map.std_basis ℂ (λ (i : ι), ℂ) i) 1) j = 1,
-  -- have hsum := @smul_sum _ (ι → ℂ) _ _ _ _ (v j) 
-    -- (λ i, ((w i).sqrt)⁻¹ • (linear_map.std_basis ℂ (λ (i : ι), ℂ) i) 1) univ,
-  -- dsimp at hsum,
-  sorry
-end
+  have hw' : ∀ i : ι, (w i) ^ - (1 / 2 : ℂ) ≠ 0, 
+  { intros i hi,  
+    exact hw i ((complex.cpow_eq_zero_iff _ _).1 hi).1 },
+  convert (weighted_sum_squares w).isometry_of_is_basis 
+    (smul_is_basis (pi.is_basis_fun ℂ ι) hw' (λ i, field.invertible (hw' i))),
+  ext1 v,
+  rw [isometry_of_is_basis_apply, weighted_sum_squares_apply, 
+      weighted_sum_squares_apply],
+  refine sum_congr rfl (λ j hj, _),
+  have hsum : (∑ (i : ι), v i • w i ^ - (1 / 2 : ℂ) • 
+    (linear_map.std_basis ℂ (λ (i : ι), ℂ) i) 1) j = 
+    v j • w j ^ - (1 / 2 : ℂ), 
+  { rw [sum_apply, sum_eq_single j, linear_map.std_basis_apply, pi.smul_apply, pi.smul_apply, 
+        function.update_same, smul_eq_mul, smul_eq_mul, smul_eq_mul, mul_one],
+    intros i _ hij, 
+    rw [linear_map.std_basis_apply, pi.smul_apply, pi.smul_apply, function.update_noteq hij.symm, 
+        pi.zero_apply, smul_eq_mul, smul_eq_mul, mul_zero, mul_zero], 
+    intro hj', exact false.elim (hj' hj) },
+  rw [hsum, smul_eq_mul],
+  suffices : 1 * v j * v j =  w j ^ - (1 / 2 : ℂ) * w j ^ - (1 / 2 : ℂ) * w j * v j * v j, 
+  { rw this, ring },
+  rw [← complex.cpow_add _ _ (hw j), show - (1 / 2 : ℂ) + - (1 / 2) = -1, by ring, 
+      complex.cpow_neg_one, inv_mul_cancel (hw j)],
+end .
+
+theorem equivalent_sum_squared {M : Type*} [add_comm_group M] [module ℂ M] 
+  [finite_dimensional ℂ M] (Q : quadratic_form ℂ M) (hQ : (associated Q).nondegenerate) : 
+  equivalent Q (weighted_sum_squares (λ _, 1 : fin (finite_dimensional.finrank ℂ M) → ℂ)) := 
+let ⟨w, hw₁, hw₂⟩ := Q.equivalent_weighted_sum_squares_of_nondegenerate' hQ in
+  nonempty.intro $ (classical.choice hw₂).trans (isometry_sum_squares w hw₁)
 
 end complex
 
