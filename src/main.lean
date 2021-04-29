@@ -1,5 +1,4 @@
 import linear_algebra.quadratic_form 
-import data.complex.basic
 import analysis.special_functions.pow
 
 /- 
@@ -20,10 +19,17 @@ variables {M : Type*} [add_comm_group M] [module R M]
 variables {M₁ : Type*} [add_comm_group M₁] [module R M₁]
 variables {ι : Type*} [fintype ι] {v : ι → M}
 
+-- Should be a def since it takes a parameter
+def field.invertible {K : Type*} [field K] {z : K} (hz : z ≠ 0) : invertible z :=
+{ inv_of := z⁻¹,
+  inv_of_mul_self := inv_mul_cancel hz,
+  mul_inv_of_self := mul_inv_cancel hz }
+
 namespace quadratic_form
 
 open finset bilin_form
 
+/-- A quadratic form composed with a linear equiv is isometric to itself. -/
 def isometry_of_comp_linear_equiv (Q : quadratic_form R M) (f : M₁ ≃ₗ[R] M) : 
   Q.isometry (Q.comp (f : M₁ →ₗ[R] M)) := 
 { map_app' := 
@@ -33,21 +39,23 @@ def isometry_of_comp_linear_equiv (Q : quadratic_form R M) (f : M₁ ≃ₗ[R] M
                linear_equiv.apply_symm_apply, f.apply_symm_apply],
   end, .. f.symm }
 
-noncomputable def isometry_of_is_basis' (Q : quadratic_form R M) 
+/-- Given a quadratic form `Q` and a basis, `of_is_basis` is the basis representation of `Q`. -/
+noncomputable def of_is_basis (Q : quadratic_form R M) 
   (hv₁ : is_basis R v) : quadratic_form R (ι → R) := Q.comp hv₁.equiv_fun.symm
 
 @[simp]
 lemma isometry_of_is_basis_apply (Q : quadratic_form R M) (hv₁ : is_basis R v) 
-  (w : ι → R) : Q.isometry_of_is_basis' hv₁ w = Q (∑ i : ι, w i • v i) := 
+  (w : ι → R) : Q.of_is_basis hv₁ w = Q (∑ i : ι, w i • v i) := 
 by { rw ← hv₁.equiv_fun_symm_apply, refl }
 
+/-- A quadratic form is isometric to its bases representations. -/
 noncomputable def isometry_of_is_basis (Q : quadratic_form R M) (hv₁ : is_basis R v) : 
-  isometry Q (Q.isometry_of_is_basis' hv₁) :=
+  isometry Q (Q.of_is_basis hv₁) :=
 isometry_of_comp_linear_equiv Q hv₁.equiv_fun.symm
 
 lemma isometry_of_is_Ortho_apply (Q : quadratic_form R M) (hv₁ : is_basis R v) 
   (hv₂ : (associated Q).is_Ortho v) (w : ι → R) : 
-  Q.isometry_of_is_basis' hv₁ w = ∑ i : ι, associated Q (v i) (v i) * w i * w i :=
+  Q.of_is_basis hv₁ w = ∑ i : ι, associated Q (v i) (v i) * w i * w i :=
 begin
   rw [isometry_of_is_basis_apply, ← @associated_eq_self_apply R, sum_left], 
   refine sum_congr rfl (λ j hj, _),
@@ -60,6 +68,8 @@ begin
   { intro hnj, exact false.elim (hnj hj) }
 end
 
+/-- The weighted sum of squared with respect some weight. `weighted_sum_squares` is the 
+quadratic form version of this. -/
 def weighted_sum_squares' (w : ι → R) : (ι → R) → R := 
   λ x, ∑ i : ι, w i * x i * x i
 
@@ -107,6 +117,7 @@ begin
   refine sum_congr rfl (λ _ _, by ring),
 end
 
+/-- `weighted_sum_squares'` represented as a quadratic form. -/
 def weighted_sum_squares (w : ι → R) : quadratic_form R (ι → R) := 
 { to_fun := weighted_sum_squares' w,
   to_fun_smul := weighted_sum_squares'_smul,
@@ -171,12 +182,8 @@ end
 
 section complex
 
--- Should be a def since it takes a parameter
-def field.invertible {z : K} (hz : z ≠ 0) : invertible z :=
-{ inv_of := z⁻¹,
-  inv_of_mul_self := inv_mul_cancel hz,
-  mul_inv_of_self := mul_inv_cancel hz }
-
+/-- The weighted sum of squares on the complex numbers as a quadratic form is equivalent 
+to the sum of squares, i.e. `weighted_sum_squares` with weight `λ i : ι, 1`. -/
 noncomputable def isometry_sum_squares (w : ι → ℂ) (hw : ∀ i : ι, w i ≠ 0) : 
   isometry (weighted_sum_squares w) (weighted_sum_squares (λ _, 1 : ι → ℂ)) := 
 begin
@@ -205,6 +212,8 @@ begin
       complex.cpow_neg_one, inv_mul_cancel (hw j)],
 end .
 
+/-- A nondegenerate quadratic form on the complex numbers is equivalent to 
+the sum of squares, i.e. `weighted_sum_squares` with weight `λ i : ι, 1`. -/
 theorem equivalent_sum_squared {M : Type*} [add_comm_group M] [module ℂ M] 
   [finite_dimensional ℂ M] (Q : quadratic_form ℂ M) (hQ : (associated Q).nondegenerate) : 
   equivalent Q (weighted_sum_squares (λ _, 1 : fin (finite_dimensional.finrank ℂ M) → ℂ)) := 
