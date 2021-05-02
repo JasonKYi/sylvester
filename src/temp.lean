@@ -1,59 +1,50 @@
-import linear_algebra.quadratic_form 
-import analysis.special_functions.pow
-
-/- 
-Sylvester's law of inertia: 
-- We would like to prove the complex version first: 
-  A quadratic form `Q` over the field `R` is isometric to a quadratic form 
-  in the form
-  ` ∑ xᵢ^2 `
-The idea is we would like to expand the API for `quadratic_form.equivalent`.
-  Given a orthogonal basis wrt. some quadratic form, we should have a equivalent 
-form. This will be constructed.
+/-
+Copyright (c) 2021 Kexing Ying. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Kexing Ying
 -/
 
-open_locale big_operators classical
+import linear_algebra.quadratic_form
+import analysis.special_functions.pow
 
-variables {R : Type*} [ring R] 
-variables {R₁ : Type*} [comm_ring R₁] [invertible (2 : R₁)] 
+/-!
+# Classification of quadratic forms
+
+This file contains theorem regarding the classification of quadratic forms.
+
+## Main statements
+
+ * `quadratic_form.equivalent_sum_squares`: A nondegenerate quadratic form over
+  ℂ is equivalent to the quadratic form corresponding to the sum of squares.
+ * `quadratic_form.equivalent_one_neg_one_weighted_sum_squared`: A nondegenerate
+  quadratic form over ℝ is equivalent to the quadratic form corresponding to
+  a weighted sum of squares with the weights being ±1. This is known as
+  Sylvester's law of inertia.
+
+## Notation
+
+In this file we let `R` be a ring, `R₁` a commutative ring and `M`, `M₁` be
+modules over `R`, while we also let `M` be a module over `R`. We also define
+the finite type `ι` and let`v` be a `ι`-indexed vector with type `ι → M`.
+
+## TODO
+
+ - Hasse invariant of a quadratic form
+ - Classification of quadratic forms over Q_p
+
+## Tags
+
+quadratic form, classification of quadratic form
+-/
+
+variables {R : Type*} [ring R] {R₁ : Type*} [comm_ring R₁]
 variables {M : Type*} [add_comm_group M] [module R M] [module R₁ M]
 variables {M₁ : Type*} [add_comm_group M₁] [module R M₁]
 variables {ι : Type*} [fintype ι] {v : ι → M}
 
--- Should be a def since it takes a parameter
-def field.invertible {K : Type*} [field K] {z : K} (hz : z ≠ 0) : invertible z :=
-{ inv_of := z⁻¹,
-  inv_of_mul_self := inv_mul_cancel hz,
-  mul_inv_of_self := mul_inv_cancel hz }
-
-lemma is_basis.smul_of_invertible {v : ι → M} (hv : is_basis R v)
-  {w : ι → R} (hw : ∀ i : ι, invertible (w i)) :
-  is_basis R (λ i, w i • v i) :=
-begin
-  obtain ⟨hw₁', hw₁''⟩ := hv,
-  split,
-  { rw linear_independent_iff'' at hw₁' ⊢,
-    intros s g hgs hsum i,
-    have hw₁ : g i * w i = 0 := hw₁' s (λ i, g i • w i) _ _ i,
-    { suffices : g i * w i * (hw i).inv_of = 0,
-        rwa [mul_assoc, mul_inv_of_self, mul_one] at this,
-      rw [hw₁, zero_mul] },
-    { intros i hi,
-      simp only [algebra.id.smul_eq_mul, hgs i hi, zero_smul] },
-    { rw [← hsum, finset.sum_congr rfl _],
-      intros, simp only [smul_assoc] } },
-  { rw eq_top_iff,
-    intros j hj,
-    rw ← hw₁'' at hj,
-    rw submodule.mem_span at hj ⊢,
-    refine λ p hp, hj p (λ u hu, _),
-    obtain ⟨i, rfl⟩ := hu,
-    have := p.smul_mem (⅟ (w i)) (hp ⟨i, rfl⟩),
-    simp only [← smul_assoc, smul_eq_mul, inv_of_mul_self, one_smul] at this,
-    exact this }
-end
-
 namespace quadratic_form
+
+open_locale big_operators
 
 open finset bilin_form
 
@@ -141,7 +132,7 @@ begin
   { intros i hi,
     exact hw i ((complex.cpow_eq_zero_iff _ _).1 hi).1 },
   convert (weighted_sum_squares w).isometry_of_is_basis
-    (is_basis.smul_of_invertible (pi.is_basis_fun ℂ ι) (λ i, field.invertible (hw' i))),
+    (is_basis.smul_of_invertible (pi.is_basis_fun ℂ ι) (λ i, invertible_of_nonzero (hw' i))),
   ext1 v,
   rw [isometry_of_is_basis_apply, weighted_sum_squares_apply, weighted_sum_squares_apply],
   refine sum_congr rfl (λ j hj, _),
@@ -216,7 +207,7 @@ begin
   have hu' : ∀ i : ι, 0 ≠ (sign (u i) * u i) ^ - (1 / 2 : ℝ),
   { intro i, exact ne_of_lt (real.rpow_pos_of_pos (sign_mul_ne_zero_pos _ (hu i)) _) },
   convert ((weighted_sum_squares u).isometry_of_is_basis
-    (is_basis.smul_of_invertible (pi.is_basis_fun ℝ ι) (λ i, field.invertible (hu' i).symm))),
+    (is_basis.smul_of_invertible (pi.is_basis_fun ℝ ι) (λ i, invertible_of_nonzero (hu' i).symm))),
   ext1 v,
   rw [isometry_of_is_basis_apply, weighted_sum_squares_apply, weighted_sum_squares_apply],
   refine sum_congr rfl (λ j hj, _),
@@ -250,30 +241,5 @@ let ⟨w, hw₁, hw₂⟩ := Q.equivalent_weighted_sum_squares_of_nondegenerate'
     hw₂.trans (nonempty.intro $ isometry_sign_weighted_sum_squares' w hw₁)⟩
 
 end real
-
--- The idea now is to restrict a degenerate quadratic form onto a smaller subspace 
--- such that it becomes nondegenerate.
-
--- def restrict_nezero (Q : quadratic_form R₁ M) : submodule R₁ M := 
--- { carrier := { v : M | v ≠ 0 → Q v ≠ 0 },
---   zero_mem' := by contradiction,
---   add_mem' := 
---     begin
---       intros x y hx hy hxy,
---       rw [← @associated_eq_self_apply R₁ _ _ _ _ _ _ _ _ _ (x + y),
---           add_left, add_right, add_right],
---       swap, apply_instance, swap, apply_instance,
---       by_cases h₁ : x = 0; by_cases h₂ : y = 0,
---       { exact false.elim (hxy (h₁.symm ▸ h₂.symm ▸ zero_add _)) },
---       { subst h₁, simp only [zero_left, zero_right, zero_add],
---         rw associated_eq_self_apply, exact hy h₂ },
---       { 
-
---       }
-
---     end,
---   smul_mem' := _ }
-
-
 
 end quadratic_form
